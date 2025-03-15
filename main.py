@@ -61,7 +61,9 @@ async def main():
     """Основная функция запуска бота"""
     await startup()  # Инициализация меню
     bot = Bot(os.getenv("TG_TOKEN"))
-    await dp.start_polling(bot)
+    # Get the port from the environment variables, default to 10000
+    port = int(os.environ.get("PORT", 10000))
+    await dp.start_polling(bot, listen_address="0.0.0.0", port=port)
 
 if __name__ == '__main__':
     asyncio.run(main())
