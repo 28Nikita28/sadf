@@ -1,27 +1,39 @@
-import aiohttp 
+import aiohttp
 import json
+import logging
 
-async def generate(text):
+logger = logging.getLogger(__name__)
+
+async def generate(text: str, ai_url: str) -> str:
     try:
         async with aiohttp.ClientSession() as session:
-            data = {"userInput": text}
-            full_response = []
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
             
-            async with session.post('https://hdghs.onrender.com/chat', json=data) as resp:
-                async for chunk in resp.content:
-                    decoded = chunk.decode()
-                    if decoded:
-                        try:
-                            data = json.loads(decoded)
-                            full_response.append(data['content'])
-                            if data.get('done'):
-                                return ''.join(full_response)
-                        except json.JSONDecodeError:
-                            continue
-                            
-                return ''.join(full_response)
+            payload = {
+                "userInput": text
+            }
+
+            async with session.post(
+                ai_url,
+                headers=headers,
+                json=payload
+            ) as response:
+                response.raise_for_status()
+                response_data = await response.json()
                 
-    except aiohttp.ClientConnectorError:
-        return 'Не удалось подключиться к серверу ИИ'
+                if isinstance(response_data, dict):
+                    return response_data.get("content", "Пустой ответ")
+                return "Некорректный формат ответа"
+                
+    except aiohttp.ClientError as e:
+        logger.error(f"Connection error: {str(e)}")
+        return "Ошибка соединения с сервисом"
+    except json.JSONDecodeError:
+        logger.error("Invalid JSON response")
+        return "Ошибка формата ответа"
     except Exception as e:
-        return f'Произошла ошибка: {str(e)}'
+        logger.error(f"General error: {str(e)}")
+        return "Внутренняя ошибка сервиса"
