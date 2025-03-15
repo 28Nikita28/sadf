@@ -15,7 +15,7 @@ TOKEN = os.getenv("TG_TOKEN")
 WEB_SERVER_HOST = "0.0.0.0"
 WEB_SERVER_PORT = int(os.environ.get("PORT", 10000))
 WEBHOOK_PATH = "/webhook"
-BASE_WEBHOOK_URL = os.getenv("https://sadf-pufq.onrender.com")
+BASE_WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://sadf-pufq.onrender.com")
 
 # Инициализация
 storage = MemoryStorage()
