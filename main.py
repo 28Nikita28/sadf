@@ -24,8 +24,8 @@ TOKEN = os.getenv("TG_TOKEN")
 WEB_SERVER_HOST = "0.0.0.0"
 WEB_SERVER_PORT = int(os.environ.get("PORT", 10000))
 WEBHOOK_PATH = "/webhook"
-BASE_WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://sadf-pufq.onrender.com")
-AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "https://hdghs.onrender.com/chat")
+BASE_WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+AI_SERVICE_URL = os.getenv("AI_SERVICE_URL")
 
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
@@ -93,20 +93,15 @@ async def model_selected(callback: types.CallbackQuery, state: FSMContext):
         return
     
     try:
-        # Сохраняем выбранную модель
         await state.update_data(selected_model=model_key)
-        
-        # Обновляем только клавиатуру
-        await callback.message.edit_reply_markup(
+        await callback.message.edit_text(
+            text=f"🎛️ <b>Текущая модель:</b>\n{MODELS[model_key]}",
             reply_markup=get_model_keyboard(model_key)
         )
         await callback.answer(f"✅ Выбрано: {MODELS[model_key]}", show_alert=False)
-        
-        # Логируем выбор
-        logger.info(f"Пользователь {callback.from_user.id} выбрал модель: {model_key}")
-        
+        logger.info(f"User {callback.from_user.id} selected: {model_key}")
     except Exception as e:
-        logger.error(f"Ошибка выбора модели: {str(e)}")
+        logger.error(f"Model select error: {str(e)}")
         await callback.answer("⚠️ Ошибка выбора модели", show_alert=True)
 
 @dp.message()
@@ -115,10 +110,8 @@ async def handle_message(message: types.Message, state: FSMContext):
         await message.bot.send_chat_action(message.chat.id, "typing")
         user_data = await state.get_data()
         model = user_data.get('selected_model', 'deepseek')
-
-        logger.info(f"Используется модель: {model} | Запрос: {message.text}")
         
-        logger.info(f"Запрос к модели [{model}]: {message.text}")
+        logger.info(f"Model: {model} | Query: {message.text}")
         
         processing_msg = await message.answer("⏳ Обработка запроса...")
         
@@ -135,15 +128,15 @@ async def handle_message(message: types.Message, state: FSMContext):
         await message.answer(response_text)
         
     except asyncio.TimeoutError:
-        await message.answer("⌛ Превышено время ожидания ответа")
+        await message.answer("⌛ Превышено время ожидания")
     except Exception as e:
-        logger.error(f"Ошибка обработки: {str(e)[:200]}")
-        await message.answer("⚠️ Ошибка при обработке запроса. Попробуйте снова.")
+        logger.error(f"Ошибка: {str(e)[:200]}")
+        await message.answer("⚠️ Ошибка обработки запроса")
 
 async def on_startup(app: web.Application):
     try:
         await bot.set_webhook(f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}")
-        logger.info("Бот успешно запущен")
+        logger.info("Бот запущен")
     except Exception as e:
         logger.error(f"Ошибка запуска: {e}")
         raise
