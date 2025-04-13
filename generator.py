@@ -1,4 +1,5 @@
-import json  # Импорт добавлен явно
+# generator.py
+import json
 import aiohttp
 import logging
 import asyncio
@@ -9,7 +10,6 @@ logger = logging.getLogger(__name__)
 async def generate(text: str, ai_url: str, model: str) -> str:
     max_retries = 3
     timeout = aiohttp.ClientTimeout(total=60)
-    response_data = await response.json()
     
     for attempt in range(max_retries):
         try:
@@ -19,14 +19,14 @@ async def generate(text: str, ai_url: str, model: str) -> str:
 
                 async with session.post(ai_url, json=payload, headers=headers) as response:
                     if response.status == 503:
-                        logger.info(f"Service sleeping, retry {attempt + 1}")
+                        logger.info(f"Сервис спит, попытка {attempt + 1}")
                         await asyncio.sleep(10 * (attempt + 1))
                         continue
                         
                     response.raise_for_status()
                     response_data = await response.json()
 
-                    # Форматирование ответа
+                    # Обработка ответа
                     if isinstance(response_data, dict):
                         content = response_data.get("content", "")
                         if any(kw in content for kw in ["{", "}", "[", "]", "="]):
@@ -35,21 +35,18 @@ async def generate(text: str, ai_url: str, model: str) -> str:
                     return "⚠️ Некорректный формат ответа"
 
         except aiohttp.ClientError as e:
-            logger.error(f"Connection error: {e}")
+            logger.error(f"Ошибка соединения: {e}")
             if attempt < max_retries - 1:
                 await asyncio.sleep(5)
                 continue
-            return "🔌 Сервис запускается... Попробуйте запрос ещё раз через 15 секунд"
+            return "🔌 Сервис запускается..."
+            
+        except json.JSONDecodeError:
+            logger.error("Невалидный JSON")
+            return "Ошибка формата ответа"
             
         except Exception as e:
-            logger.error(f"General error: {e}")
-            return "⚙️ Внутренняя ошибка сервиса"
-        
-        except json.JSONDecodeError:  # Используем модуль json
-             logger.error("Invalid JSON response")
-             return "Ошибка формата ответа"
+            logger.error(f"Общая ошибка: {e}")
+            return "⚙️ Внутренняя ошибка"
     
-    return "🔌 Не удалось обработать запрос. Сервис пробуждается..."
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    return "🔌 Сервис недоступен"
