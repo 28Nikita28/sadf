@@ -1,5 +1,5 @@
+import json  # Импорт добавлен явно
 import aiohttp
-import json
 import logging
 import asyncio
 from pprint import pformat
@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 async def generate(text: str, ai_url: str, model: str) -> str:
     max_retries = 3
     timeout = aiohttp.ClientTimeout(total=60)
+    response_data = await response.json()
     
     for attempt in range(max_retries):
         try:
@@ -43,5 +44,12 @@ async def generate(text: str, ai_url: str, model: str) -> str:
         except Exception as e:
             logger.error(f"General error: {e}")
             return "⚙️ Внутренняя ошибка сервиса"
+        
+        except json.JSONDecodeError:  # Используем модуль json
+             logger.error("Invalid JSON response")
+             return "Ошибка формата ответа"
     
     return "🔌 Не удалось обработать запрос. Сервис пробуждается..."
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)

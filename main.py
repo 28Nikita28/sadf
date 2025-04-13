@@ -10,7 +10,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.markdown import hcode, hbold
 from aiogram.client.default import DefaultBotProperties
-from aiogram.types import ChatActions
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
 from generator import generate
 
@@ -130,7 +130,7 @@ from aiogram.types import ChatActions
 @dp.message()
 async def handle_message(message: types.Message, state: FSMContext):
     try:
-        await message.bot.send_chat_action(message.chat.id, ChatActions.TYPING)
+        await message.bot.send_chat_action(message.chat.id, "typing")
         
         user_data = await state.get_data()
         model = user_data.get('selected_model', 'deepseek')
