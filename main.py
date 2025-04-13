@@ -9,6 +9,7 @@ import logging
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.markdown import hcode, hbold
+from aiogram.client.default import DefaultBotProperties
 
 from generator import generate
 
@@ -26,7 +27,7 @@ AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "https://hdghs.onrender.com/chat")
 
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
-bot = Bot(TOKEN, parse_mode="HTML")
+bot = Bot(TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 
 class UserState(StatesGroup):
     selected_model = State()
