@@ -93,14 +93,20 @@ async def model_selected(callback: types.CallbackQuery, state: FSMContext):
         return
     
     try:
+        # Сохраняем выбранную модель
         await state.update_data(selected_model=model_key)
-        await callback.message.edit_text(
-            text=f"🎛️ <b>Текущая модель:</b>\n{MODELS[model_key]}",
+        
+        # Обновляем только клавиатуру
+        await callback.message.edit_reply_markup(
             reply_markup=get_model_keyboard(model_key)
         )
         await callback.answer(f"✅ Выбрано: {MODELS[model_key]}", show_alert=False)
+        
+        # Логируем выбор
+        logger.info(f"Пользователь {callback.from_user.id} выбрал модель: {model_key}")
+        
     except Exception as e:
-        logger.error(f"Ошибка выбора модели: {e}")
+        logger.error(f"Ошибка выбора модели: {str(e)}")
         await callback.answer("⚠️ Ошибка выбора модели", show_alert=True)
 
 @dp.message()
@@ -109,6 +115,8 @@ async def handle_message(message: types.Message, state: FSMContext):
         await message.bot.send_chat_action(message.chat.id, "typing")
         user_data = await state.get_data()
         model = user_data.get('selected_model', 'deepseek')
+
+        logger.info(f"Используется модель: {model} | Запрос: {message.text}")
         
         logger.info(f"Запрос к модели [{model}]: {message.text}")
         

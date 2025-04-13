@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 async def generate(text: str, ai_url: str, model: str) -> str:
     max_retries = 3
     timeout = aiohttp.ClientTimeout(total=120)
+    logger.info(f"Отправка запроса к модели {model} с текстом: {text[:100]}...")
     
     async def process_response(response):
         try:
