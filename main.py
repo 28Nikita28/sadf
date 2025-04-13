@@ -1,4 +1,5 @@
 # main.py
+import asyncio
 import os
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, Command
@@ -14,13 +15,11 @@ from aiogram.client.default import DefaultBotProperties
 
 from generator import generate
 
-# Настройка логов
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-# Конфигурация
 TOKEN = os.getenv("TG_TOKEN")
 WEB_SERVER_HOST = "0.0.0.0"
 WEB_SERVER_PORT = int(os.environ.get("PORT", 10000))
@@ -28,7 +27,6 @@ WEBHOOK_PATH = "/webhook"
 BASE_WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://sadf-pufq.onrender.com")
 AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "https://hdghs.onrender.com/chat")
 
-# Инициализация бота
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 bot = Bot(TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
@@ -96,8 +94,7 @@ async def model_selected(callback: types.CallbackQuery, state: FSMContext):
     
     try:
         await state.update_data(selected_model=model_key)
-        await callback.message.edit_text(
-            text=f"🎛️ <b>Текущая модель:</b>\n{MODELS[model_key]}",
+        await callback.message.edit_reply_markup(
             reply_markup=get_model_keyboard(model_key)
         )
         await callback.answer(f"✅ Выбрано: {MODELS[model_key]}", show_alert=True)
@@ -108,30 +105,31 @@ async def model_selected(callback: types.CallbackQuery, state: FSMContext):
 @dp.message()
 async def handle_message(message: types.Message, state: FSMContext):
     try:
-        # Индикатор набора сообщения
         await message.bot.send_chat_action(message.chat.id, "typing")
-        
         user_data = await state.get_data()
         model = user_data.get('selected_model', 'deepseek')
         
         logger.info(f"Обработка сообщения с моделью [{model}]: {message.text}")
         
-        # Уведомление о начале обработки
         processing_msg = await message.answer("⏳ Запрос принят...")
         
         response = await generate(message.text, AI_SERVICE_URL, model)
         
         await processing_msg.delete()
         
-        # Форматирование ответа
+        if not response:
+            raise ValueError("Пустой ответ от модели")
+            
         formatted = response.replace("```", "'''")
         response_text = f"📝 {MODELS[model]}:\n{hcode(formatted)}"
         
         await message.answer(response_text)
         
+    except asyncio.TimeoutError:
+        await message.answer("⌛ Превышено время ожидания ответа")
     except Exception as e:
         logger.error(f"Ошибка обработки: {e}")
-        await message.answer("⚠️ Ошибка. Попробуйте позже.")
+        await message.answer("⚠️ Ошибка при обработке запроса. Попробуйте снова.")
 
 async def on_startup(app: web.Application):
     try:
