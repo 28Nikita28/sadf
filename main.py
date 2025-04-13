@@ -10,6 +10,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.markdown import hcode, hbold
 from aiogram.client.default import DefaultBotProperties
+from aiogram.types import ChatActions
 
 from generator import generate
 
@@ -32,12 +33,14 @@ bot = Bot(TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 class UserState(StatesGroup):
     selected_model = State()
 
+# ... (остальные импорты без изменений)
+
 MODELS = {
-    "deepseek": "🧠 DeepSeek Chat",
+    "deepseek": "🧠 DeepSeek 0324",
     "deepseek-r1": "🚀 DeepSeek R1",
     "deepseek-v3": "💎 DeepSeek v3",
-    "gemini": "🔮 Gemini Pro",
-    "gemma": "💎 Gemma 3B",
+    "gemini": "🔮 Gemini 2.5",
+    "gemma": "💎 Gemma 27B",
     "qwen": "🎲 Qwen 32B",
     "qwen 2.5": "🎲 Qwen 2.5",
     "llama-4-maverick": "🦙 Llama Maverick",
@@ -46,22 +49,42 @@ MODELS = {
 
 def get_model_keyboard(selected: str = None) -> types.InlineKeyboardMarkup:
     buttons = []
-    row = []
-    for i, (key, name) in enumerate(MODELS.items()):
-        btn_text = f"✅ {name}" if key == selected else name
-        row.append(types.InlineKeyboardButton(text=btn_text, callback_data=key))
-        if (i + 1) % 2 == 0:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
+    for key, name in MODELS.items():
+        # Добавляем иконку состояния и эмодзи-индикатор
+        status_icon = "🔵" if key == selected else "⚪"
+        btn_text = f"{status_icon} {name}"
+        buttons.append([types.InlineKeyboardButton(
+            text=btn_text, 
+            callback_data=key
+        )])
+    
+    # Добавляем разделитель и веб-кнопку
     buttons.append([
         types.InlineKeyboardButton(
-            text="🌐 Web App", 
+            text="🌍 Web App", 
             web_app=types.WebAppInfo(url="https://w5model.netlify.app/")
         )
     ])
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
+
+@dp.callback_query()
+async def model_selected(callback: types.CallbackQuery, state: FSMContext):
+    model_key = callback.data
+    if model_key not in MODELS:
+        await callback.answer("❌ Неизвестная модель", show_alert=True)
+        return
+    
+    try:
+        await state.update_data(selected_model=model_key)
+        await callback.message.edit_text(
+            text=f"🎛️ <b>Текущая модель:</b>\n{MODELS[model_key]}",
+            reply_markup=get_model_keyboard(model_key)
+        )
+        await callback.answer(f"✅ Выбрано: {MODELS[model_key]}", show_alert=True)
+    except Exception as e:
+        logger.error(f"Error updating model: {e}")
+        await callback.answer("⚠️ Ошибка выбора модели", show_alert=True)
+
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
@@ -97,14 +120,30 @@ async def model_selected(callback: types.CallbackQuery, state: FSMContext):
     )
     await callback.answer(f"✅ Выбрана: {MODELS[model_key]}")
 
+
+    # ... предыдущие импорты ...
+from aiogram.client.default import DefaultBotProperties
+from aiogram.types import ChatActions
+
+# ... остальной код без изменений до handle_message ...
+
 @dp.message()
 async def handle_message(message: types.Message, state: FSMContext):
     try:
+        await message.bot.send_chat_action(message.chat.id, ChatActions.TYPING)
+        
         user_data = await state.get_data()
         model = user_data.get('selected_model', 'deepseek')
         
         logger.info(f"Processing message with model [{model}]: {message.text}")
+        
+        # Отправка сообщения о начале обработки
+        processing_msg = await message.answer("⏳ Запрос принят, начинаю обработку...")
+        
         response = await generate(message.text, AI_SERVICE_URL, model)
+        
+        # Удаление сообщения о обработке
+        await processing_msg.delete()
         
         # Форматирование ответа
         formatted = response.replace("```", "'''").replace("`", "'")
@@ -117,7 +156,8 @@ async def handle_message(message: types.Message, state: FSMContext):
         
     except Exception as e:
         logger.error(f"Error handling message: {str(e)}")
-        await message.answer("⚠️ Произошла ошибка при обработке запроса")
+        await message.answer("⚠️ Произошла ошибка при обработке запроса. Попробуйте повторить запрос через 10-15 секунд.")
+
 
 async def on_startup(app: web.Application):
     try:

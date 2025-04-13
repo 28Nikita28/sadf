@@ -1,34 +1,47 @@
 import aiohttp
 import json
 import logging
+import asyncio
 from pprint import pformat
 
 logger = logging.getLogger(__name__)
 
 async def generate(text: str, ai_url: str, model: str) -> str:
-    try:
-        async with aiohttp.ClientSession() as session:
-            headers = {"Content-Type": "application/json"}
-            payload = {"userInput": text, "model": model}
+    max_retries = 3
+    timeout = aiohttp.ClientTimeout(total=60)
+    
+    for attempt in range(max_retries):
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                headers = {"Content-Type": "application/json"}
+                payload = {"userInput": text, "model": model}
 
-            async with session.post(ai_url, json=payload, headers=headers) as response:
-                response.raise_for_status()
-                response_data = await response.json()
+                async with session.post(ai_url, json=payload, headers=headers) as response:
+                    if response.status == 503:
+                        logger.info(f"Service sleeping, retry {attempt + 1}")
+                        await asyncio.sleep(10 * (attempt + 1))
+                        continue
+                        
+                    response.raise_for_status()
+                    response_data = await response.json()
 
-                # Форматирование сложных структур
-                if isinstance(response_data, dict):
-                    content = response_data.get("content", "")
-                    if any(kw in content for kw in ["{", "}", "[", "]", "="]):
-                        return pformat(content, width=80)
-                    return content
-                return "⚠️ Некорректный формат ответа"
+                    # Форматирование ответа
+                    if isinstance(response_data, dict):
+                        content = response_data.get("content", "")
+                        if any(kw in content for kw in ["{", "}", "[", "]", "="]):
+                            return pformat(content, width=80)
+                        return content
+                    return "⚠️ Некорректный формат ответа"
 
-    except aiohttp.ClientError as e:
-        logger.error(f"Connection error: {e}")
-        return "🔌 Ошибка соединения с сервисом"
-    except json.JSONDecodeError:
-        logger.error("Invalid JSON response")
-        return "📄 Ошибка формата ответа"
-    except Exception as e:
-        logger.error(f"General error: {e}")
-        return "⚙️ Внутренняя ошибка сервиса"
+        except aiohttp.ClientError as e:
+            logger.error(f"Connection error: {e}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(5)
+                continue
+            return "🔌 Сервис запускается... Попробуйте запрос ещё раз через 15 секунд"
+            
+        except Exception as e:
+            logger.error(f"General error: {e}")
+            return "⚙️ Внутренняя ошибка сервиса"
+    
+    return "🔌 Не удалось обработать запрос. Сервис пробуждается..."
