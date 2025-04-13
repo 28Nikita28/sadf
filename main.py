@@ -49,11 +49,11 @@ MODELS = {
 def get_model_keyboard(selected: str = None) -> types.InlineKeyboardMarkup:
     buttons = []
     for key, name in MODELS.items():
-        status_icon = "🔵" if key == selected else "⚪"
+        status_icon = "🟢" if key == selected else "⚪"
         buttons.append([
             types.InlineKeyboardButton(
                 text=f"{status_icon} {name}", 
-                callback_data=key
+                callback_data=f"model_{key}"
             )
         ])
     buttons.append([
@@ -85,19 +85,20 @@ async def select_model(message: types.Message, state: FSMContext):
         reply_markup=get_model_keyboard(user_data.get('selected_model'))
     )
 
-@dp.callback_query()
+@dp.callback_query(lambda c: c.data.startswith('model_'))
 async def model_selected(callback: types.CallbackQuery, state: FSMContext):
-    model_key = callback.data
+    model_key = callback.data.replace('model_', '')
     if model_key not in MODELS:
         await callback.answer("❌ Неизвестная модель", show_alert=True)
         return
     
     try:
         await state.update_data(selected_model=model_key)
-        await callback.message.edit_reply_markup(
+        await callback.message.edit_text(
+            text=f"🎛️ <b>Текущая модель:</b>\n{MODELS[model_key]}",
             reply_markup=get_model_keyboard(model_key)
         )
-        await callback.answer(f"✅ Выбрано: {MODELS[model_key]}", show_alert=True)
+        await callback.answer(f"✅ Выбрано: {MODELS[model_key]}", show_alert=False)
     except Exception as e:
         logger.error(f"Ошибка выбора модели: {e}")
         await callback.answer("⚠️ Ошибка выбора модели", show_alert=True)
@@ -109,9 +110,9 @@ async def handle_message(message: types.Message, state: FSMContext):
         user_data = await state.get_data()
         model = user_data.get('selected_model', 'deepseek')
         
-        logger.info(f"Обработка сообщения с моделью [{model}]: {message.text}")
+        logger.info(f"Запрос к модели [{model}]: {message.text}")
         
-        processing_msg = await message.answer("⏳ Запрос принят...")
+        processing_msg = await message.answer("⏳ Обработка запроса...")
         
         response = await generate(message.text, AI_SERVICE_URL, model)
         
@@ -128,7 +129,7 @@ async def handle_message(message: types.Message, state: FSMContext):
     except asyncio.TimeoutError:
         await message.answer("⌛ Превышено время ожидания ответа")
     except Exception as e:
-        logger.error(f"Ошибка обработки: {e}")
+        logger.error(f"Ошибка обработки: {str(e)[:200]}")
         await message.answer("⚠️ Ошибка при обработке запроса. Попробуйте снова.")
 
 async def on_startup(app: web.Application):
