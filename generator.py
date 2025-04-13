@@ -1,48 +1,34 @@
 import aiohttp
 import json
 import logging
+from pprint import pformat
 
 logger = logging.getLogger(__name__)
 
-async def generate(text: str, ai_url: str, model: str = "deepseek") -> str:
+async def generate(text: str, ai_url: str, model: str) -> str:
     try:
         async with aiohttp.ClientSession() as session:
-            headers = {
-                "Content-Type": "application/json",
-                "Accept": "text/event-stream"
-            }
-            
-            payload = {
-                "userInput": text,
-                "model": model
-            }
+            headers = {"Content-Type": "application/json"}
+            payload = {"userInput": text, "model": model}
 
-            full_response = []
-            
-            async with session.post(
-                ai_url,
-                headers=headers,
-                json=payload
-            ) as response:
+            async with session.post(ai_url, json=payload, headers=headers) as response:
                 response.raise_for_status()
-                
-                async for line in response.content:
-                    if line.startswith(b'data: '):
-                        chunk = line[6:].strip()
-                        if chunk == b'[DONE]':
-                            break
-                        try:
-                            data = json.loads(chunk.decode('utf-8'))
-                            content = data.get('content', '')
-                            full_response.append(content)
-                        except json.JSONDecodeError:
-                            continue
+                response_data = await response.json()
 
-            return ''.join(full_response)
-                
+                # Форматирование сложных структур
+                if isinstance(response_data, dict):
+                    content = response_data.get("content", "")
+                    if any(kw in content for kw in ["{", "}", "[", "]", "="]):
+                        return pformat(content, width=80)
+                    return content
+                return "⚠️ Некорректный формат ответа"
+
     except aiohttp.ClientError as e:
-        logger.error(f"Connection error: {str(e)}")
-        return "Ошибка соединения с сервисом"
+        logger.error(f"Connection error: {e}")
+        return "🔌 Ошибка соединения с сервисом"
+    except json.JSONDecodeError:
+        logger.error("Invalid JSON response")
+        return "📄 Ошибка формата ответа"
     except Exception as e:
-        logger.error(f"General error: {str(e)}")
-        return "Внутренняя ошибка сервиса"
+        logger.error(f"General error: {e}")
+        return "⚙️ Внутренняя ошибка сервиса"

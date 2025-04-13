@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import logging
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.utils.markdown import hcode, hbold
 
 from generator import generate
 
@@ -25,92 +26,113 @@ AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "https://hdghs.onrender.com/chat")
 
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
-bot = Bot(TOKEN)
+bot = Bot(TOKEN, parse_mode="HTML")
 
 class UserState(StatesGroup):
     selected_model = State()
 
 MODELS = {
-    "deepseek": "DeepSeek Chat",
-    "deepseek-r1": "DeepSeek R1",
-    "gemini": "Gemini Pro",
-    "llama-4-maverick": "Llama 4 Maverick",
-    "qwen": "Qwen 32B"
+    "deepseek": "🧠 DeepSeek Chat",
+    "deepseek-r1": "🚀 DeepSeek R1",
+    "deepseek-v3": "💎 DeepSeek v3",
+    "gemini": "🔮 Gemini Pro",
+    "gemma": "💎 Gemma 3B",
+    "qwen": "🎲 Qwen 32B",
+    "qwen 2.5": "🎲 Qwen 2.5",
+    "llama-4-maverick": "🦙 Llama Maverick",
+    "llama-4-scout": "🦙 Llama Scout"
 }
 
+def get_model_keyboard(selected: str = None) -> types.InlineKeyboardMarkup:
+    buttons = []
+    row = []
+    for i, (key, name) in enumerate(MODELS.items()):
+        btn_text = f"✅ {name}" if key == selected else name
+        row.append(types.InlineKeyboardButton(text=btn_text, callback_data=key))
+        if (i + 1) % 2 == 0:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([
+        types.InlineKeyboardButton(
+            text="🌐 Web App", 
+            web_app=types.WebAppInfo(url="https://w5model.netlify.app/")
+        )
+    ])
+    return types.InlineKeyboardMarkup(inline_keyboard=buttons)
+
 @dp.message(CommandStart())
-async def cmd_start(message: types.Message):
+async def cmd_start(message: types.Message, state: FSMContext):
     try:
-        await message.answer('Добро пожаловать! Нажмите иконку "🌐 App" справа внизу или используйте команду /model для выбора модели ИИ.')
+        await state.set_data({"selected_model": "deepseek"})
+        await message.answer(
+            f"{hbold('🤖 AI Assistant Bot')}\n\n"
+            "Выберите модель ИИ или используйте веб-приложение:\n"
+            "По умолчанию: 🧠 DeepSeek Chat",
+            reply_markup=get_model_keyboard()
+        )
     except Exception as e:
         logger.error(f"Error in cmd_start: {str(e)}")
 
 @dp.message(Command("model"))
 async def select_model(message: types.Message, state: FSMContext):
-    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text=name, callback_data=key)]
-        for key, name in MODELS.items()
-    ])
-    await message.answer("Выберите модель ИИ:", reply_markup=keyboard)
+    user_data = await state.get_data()
+    await message.answer(
+        "🔧 Выберите модель ИИ:",
+        reply_markup=get_model_keyboard(user_data.get('selected_model'))
+    )
 
 @dp.callback_query()
 async def model_selected(callback: types.CallbackQuery, state: FSMContext):
     model_key = callback.data
     if model_key not in MODELS:
-        await callback.answer("Неизвестная модель")
+        await callback.answer("❌ Неизвестная модель")
         return
     
     await state.update_data(selected_model=model_key)
-    await callback.message.edit_text(f"Выбрана модель: {MODELS[model_key]}")
-    await callback.answer()
+    await callback.message.edit_reply_markup(
+        reply_markup=get_model_keyboard(model_key)
+    )
+    await callback.answer(f"✅ Выбрана: {MODELS[model_key]}")
 
 @dp.message()
 async def handle_message(message: types.Message, state: FSMContext):
     try:
         user_data = await state.get_data()
-        selected_model = user_data.get('selected_model', 'deepseek')
+        model = user_data.get('selected_model', 'deepseek')
         
-        logger.info(f"Received message with model [{selected_model}]: {message.text}")
-        result = await generate(message.text, AI_SERVICE_URL, selected_model)
-        await message.answer(result)
+        logger.info(f"Processing message with model [{model}]: {message.text}")
+        response = await generate(message.text, AI_SERVICE_URL, model)
+        
+        # Форматирование ответа
+        formatted = response.replace("```", "'''").replace("`", "'")
+        if any(kw in response.lower() for kw in ["python", "code", "javascript"]):
+            response = f"📝 Ответ модели {MODELS[model]}:\n{hcode(formatted)}"
+        else:
+            response = f"📝 Ответ модели {MODELS[model]}:\n{formatted}"
+            
+        await message.answer(response)
+        
     except Exception as e:
         logger.error(f"Error handling message: {str(e)}")
-        await message.answer("Произошла ошибка при обработке запроса")
+        await message.answer("⚠️ Произошла ошибка при обработке запроса")
 
 async def on_startup(app: web.Application):
     try:
         await bot.set_webhook(f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}")
-        await bot.set_chat_menu_button(
-            menu_button=types.MenuButtonWebApp(
-                text="🌐 App",
-                web_app=types.WebAppInfo(url="https://w5model.netlify.app/")
-            )
-        )
         logger.info("Bot started successfully")
     except Exception as e:
         logger.error(f"Startup error: {str(e)}")
         raise
 
 def main():
-    try:
-        app = web.Application()
-        app.on_startup.append(on_startup)
-        
-        webhook_requests_handler = SimpleRequestHandler(
-            dispatcher=dp,
-            bot=bot,
-        )
-        webhook_requests_handler.register(app, path=WEBHOOK_PATH)
-        
-        setup_application(app, dp, bot=bot)
-        
-        web.run_app(
-            app,
-            host=WEB_SERVER_HOST,
-            port=WEB_SERVER_PORT
-        )
-    except Exception as e:
-        logger.error(f"Fatal error: {str(e)}")
+    app = web.Application()
+    app.on_startup.append(on_startup)
+    webhook_requests_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
+    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
+    setup_application(app, dp, bot=bot)
+    web.run_app(app, host=WEB_SERVER_HOST, port=WEB_SERVER_PORT)
 
 if __name__ == '__main__':
     main()
