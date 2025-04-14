@@ -1,6 +1,6 @@
 # main.py
-import os
 import asyncio
+import os
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -15,23 +15,24 @@ from aiogram.client.default import DefaultBotProperties
 
 from generator import generate
 
-# Инициализация логов
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-# Конфигурация
-TOKEN = os.getenv("TG_TOKEN")
+# Проверка обязательных переменных
+MISSING_ENV = []
+TOKEN = os.getenv("TG_TOKEN") or MISSING_ENV.append("TG_TOKEN")
+BASE_WEBHOOK_URL = os.getenv("WEBHOOK_URL") or MISSING_ENV.append("WEBHOOK_URL")
+AI_SERVICE_URL = os.getenv("AI_SERVICE_URL") or MISSING_ENV.append("AI_SERVICE_URL")
+
+if MISSING_ENV:
+    logger.critical(f"Отсутствуют переменные окружения: {MISSING_ENV}")
+    exit(1)
+
 WEB_SERVER_HOST = "0.0.0.0"
 WEB_SERVER_PORT = int(os.environ.get("PORT", 10000))
 WEBHOOK_PATH = "/webhook"
-BASE_WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").rstrip("/")  # Нормализация URL
-AI_SERVICE_URL = os.getenv("AI_SERVICE_URL")
-
-# Проверка обязательных переменных
-if not all([TOKEN, BASE_WEBHOOK_URL, AI_SERVICE_URL]):
-    raise EnvironmentError("Не заданы обязательные переменные окружения")
 
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
@@ -53,15 +54,18 @@ MODELS = {
 }
 
 def get_model_keyboard(selected: str = None) -> types.InlineKeyboardMarkup:
-    buttons = [
-        [types.InlineKeyboardButton(
-            text=f"{'🟢' if key == selected else '⚪'} {name}",
-            callback_data=f"model_{key}"
-        )] for key, name in MODELS.items()
-    ]
+    buttons = []
+    for key, name in MODELS.items():
+        status_icon = "🟢" if key == selected else "⚪"
+        buttons.append([
+            types.InlineKeyboardButton(
+                text=f"{status_icon} {name}", 
+                callback_data=f"model_{key}"
+            )
+        ])
     buttons.append([
         types.InlineKeyboardButton(
-            text="🌍 Web App",
+            text="🌍 Web App", 
             web_app=types.WebAppInfo(url="https://w5model.netlify.app/")
         )
     ])
@@ -97,13 +101,14 @@ async def model_selected(callback: types.CallbackQuery, state: FSMContext):
     
     try:
         await state.update_data(selected_model=model_key)
-        await callback.message.edit_reply_markup(
+        await callback.message.edit_text(
+            text=f"🎛️ <b>Текущая модель:</b>\n{MODELS[model_key]}",
             reply_markup=get_model_keyboard(model_key)
         )
         await callback.answer(f"✅ Выбрано: {MODELS[model_key]}", show_alert=False)
-        logger.info(f"User {callback.from_user.id} выбрал модель: {model_key}")
+        logger.info(f"User {callback.from_user.id} selected: {model_key}")
     except Exception as e:
-        logger.error(f"Ошибка выбора модели: {str(e)}")
+        logger.error(f"Model select error: {str(e)}")
         await callback.answer("⚠️ Ошибка выбора модели", show_alert=True)
 
 @dp.message()
@@ -113,20 +118,27 @@ async def handle_message(message: types.Message, state: FSMContext):
         user_data = await state.get_data()
         model = user_data.get('selected_model', 'deepseek')
         
-        logger.info(f"Запрос к модели {model}: {message.text}")
+        logger.info(f"Model: {model} | Query: {message.text}")
         
         processing_msg = await message.answer("⏳ Обработка запроса...")
+        
         response = await generate(message.text, AI_SERVICE_URL, model)
+        
         await processing_msg.delete()
         
+        if not response:
+            raise ValueError("Пустой ответ от модели")
+            
         formatted = response.replace("```", "'''")
-        await message.answer(f"📝 {MODELS[model]}:\n{hcode(formatted)}")
+        response_text = f"📝 {MODELS[model]}:\n{hcode(formatted)}"
+        
+        await message.answer(response_text)
         
     except asyncio.TimeoutError:
         await message.answer("⌛ Превышено время ожидания")
     except Exception as e:
-        logger.error(f"Ошибка обработки: {str(e)[:200]}")
-        await message.answer("⚠️ Ошибка при обработке запроса")
+        logger.error(f"Ошибка: {str(e)[:200]}")
+        await message.answer("⚠️ Ошибка обработки запроса")
 
 async def on_startup(app: web.Application):
     try:
@@ -135,15 +147,21 @@ async def on_startup(app: web.Application):
         await bot.set_webhook(webhook_url)
         logger.info("Бот успешно запущен")
     except Exception as e:
-        logger.error(f"Ошибка запуска: {e}")
-        raise
+        logger.critical(f"Ошибка запуска вебхука: {str(e)}")
+        exit(1)
 
 def main():
     app = web.Application()
     app.on_startup.append(on_startup)
-    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
+    webhook_requests_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
+    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
     setup_application(app, dp, bot=bot)
-    web.run_app(app, host=WEB_SERVER_HOST, port=WEB_SERVER_PORT)
+    
+    try:
+        web.run_app(app, host=WEB_SERVER_HOST, port=WEB_SERVER_PORT)
+    except Exception as e:
+        logger.critical(f"Ошибка сервера: {str(e)}")
+        exit(1)
 
 if __name__ == '__main__':
     main()
