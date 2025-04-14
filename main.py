@@ -11,6 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.markdown import hcode, hbold
 from aiogram.client.default import DefaultBotProperties
+from aiohttp import web
 
 from generator import generate
 
@@ -139,6 +140,27 @@ async def main():
 async def on_startup(dp: Dispatcher):
     await bot.delete_webhook(drop_pending_updates=True)
 
+async def start_bot(app):
+    await dp.start_polling(bot)
+
+async def dummy_handler(request):
+    return web.Response(text="OK")
+
+async def main():
+    # Создаем приложение aiohttp
+    app = web.Application()
+    app.router.add_get("/", dummy_handler)
+    
+    # Настраиваем порт
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", int(os.getenv("PORT", 8000)))
+    
+    # Запускаем бота и сервер
+    await asyncio.gather(
+        site.start(),
+        dp.start_polling(bot)
+    )
+
 if __name__ == '__main__':
-    dp.startup.register(on_startup)
     asyncio.run(main())
