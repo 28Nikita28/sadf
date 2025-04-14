@@ -8,18 +8,20 @@ from pprint import pformat  # Восстановлен импорт
 logger = logging.getLogger(__name__)
 
 async def generate(text: str, ai_url: str, model: str) -> str:
-    max_retries = 3
-    timeout = aiohttp.ClientTimeout(total=120)
-    
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json"  # Явное указание формата ответа
-    }
-    
-    payload = {
-        "userInput": text,
-        "model": model
-    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{ai_url}/chat/telegram",  # Правильный путь
+                json={"userInput": text, "model": model},
+                headers={"Content-Type": "application/json"}
+            ) as response:
+                response.raise_for_status()
+                data = await response.json()
+                return data.get("content", "Нет ответа от модели")
+                
+    except Exception as e:
+        logger.error(f"Generator error: {str(e)[:200]}")
+        return "⚠️ Ошибка связи с сервером"
 
     for attempt in range(max_retries):
         try:

@@ -84,22 +84,21 @@ async def select_model(message: types.Message, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data.startswith('model_'))
 async def model_selected(callback: types.CallbackQuery, state: FSMContext):
-    model_key = callback.data.replace('model_', '')
-    if model_key not in MODELS:
-        await callback.answer("❌ Неизвестная модель", show_alert=True)
-        return
-    
     try:
+        model_key = callback.data.split('_')[1]
+        if model_key not in MODELS:
+            await callback.answer("❌ Неизвестная модель")
+            return
+
         await state.update_data(selected_model=model_key)
-        await callback.message.edit_text(
-            text=f"🎛️ <b>Текущая модель:</b>\n{MODELS[model_key]}",
+        await callback.message.edit_reply_markup(
             reply_markup=get_model_keyboard(model_key)
         )
-        await callback.answer(f"✅ Выбрано: {MODELS[model_key]}", show_alert=False)
-        logger.info(f"User {callback.from_user.id} selected: {model_key}")
+        await callback.answer(f"✅ {MODELS[model_key]}")
+        
     except Exception as e:
-        logger.error(f"Model select error: {str(e)}")
-        await callback.answer("⚠️ Ошибка выбора модели", show_alert=True)
+        logger.error(f"Callback error: {str(e)}")
+        await callback.answer("⚠️ Ошибка обновления")
 
 @dp.message()
 async def handle_message(message: types.Message, state: FSMContext):
@@ -113,7 +112,7 @@ async def handle_message(message: types.Message, state: FSMContext):
         processing_msg = await message.answer("⏳ Обработка запроса...")
         
         # Для примера используем локальный URL
-        response = await generate(message.text, "http://localhost:10000/chat", model)
+        response = await generate(message.text, "https://hdghs.onrender.com", model)
         
         await processing_msg.delete()
         
