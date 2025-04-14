@@ -23,7 +23,7 @@ load_dotenv()
 # Проверка обязательных переменных
 TOKEN = os.getenv("TG_TOKEN")
 BASE_WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-AI_SERVICE_URL = "http://localhost:10000/chat"  # Локальный адрес FastAPI
+AI_SERVICE_URL = f"http://localhost:{os.environ.get('PORT', 10000)}/chat"  # Локальный адрес FastAPI
 
 if not TOKEN:
     logger.critical("❌ Отсутствует TG_TOKEN")
@@ -85,6 +85,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
         )
     except Exception as e:
         logger.error(f"Ошибка в cmd_start: {e}")
+    
 
 @dp.message(Command("model"))
 async def select_model(message: types.Message, state: FSMContext):
@@ -142,18 +143,29 @@ async def handle_message(message: types.Message, state: FSMContext):
         logger.error(f"Ошибка: {str(e)[:200]}")
         await message.answer("⚠️ Ошибка обработки запроса")
 
+@dp.get("/")
+async def health_check(request: web.Request):
+    return web.Response(text="Bot is running", status=200)
+
 async def on_startup(app: web.Application):
     try:
+        # Проверяем корректность URL вебхука
         webhook_url = f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}"
+        if not webhook_url.startswith("https://"):
+            logger.error("❌ WEBHOOK_URL должен использовать HTTPS")
+            exit(1)
+            
         logger.info(f"🔄 Устанавливаю вебхук: {webhook_url}")
         await bot.set_webhook(webhook_url)
-        logger.info("🤖 Бот запущен")
+        logger.info("🤖 Бот запущен. Доступные модели: " + ", ".join(MODELS.keys()))
+        
     except Exception as e:
         logger.critical(f"🚨 Ошибка вебхука: {str(e)}")
         exit(1)
 
 def main():
     app = web.Application()
+    app.add_routes([web.get("/", health_check)])
     app.on_startup.append(on_startup)
     webhook_requests_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
     webhook_requests_handler.register(app, path=WEBHOOK_PATH)
