@@ -21,13 +21,15 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Проверка обязательных переменных
-MISSING_ENV = []
-TOKEN = os.getenv("TG_TOKEN") or MISSING_ENV.append("TG_TOKEN")
-BASE_WEBHOOK_URL = os.getenv("WEBHOOK_URL") or MISSING_ENV.append("WEBHOOK_URL")
-AI_SERVICE_URL = os.getenv("AI_SERVICE_URL") or MISSING_ENV.append("AI_SERVICE_URL")
+TOKEN = os.getenv("TG_TOKEN")
+BASE_WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+AI_SERVICE_URL = "http://localhost:10000/chat"  # Локальный адрес FastAPI
 
-if MISSING_ENV:
-    logger.critical(f"Отсутствуют переменные окружения: {MISSING_ENV}")
+if not TOKEN:
+    logger.critical("❌ Отсутствует TG_TOKEN")
+    exit(1)
+if not BASE_WEBHOOK_URL:
+    logger.critical("❌ Отсутствует WEBHOOK_URL")
     exit(1)
 
 WEB_SERVER_HOST = "0.0.0.0"
@@ -143,11 +145,11 @@ async def handle_message(message: types.Message, state: FSMContext):
 async def on_startup(app: web.Application):
     try:
         webhook_url = f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}"
-        logger.info(f"Устанавливаю вебхук: {webhook_url}")
+        logger.info(f"🔄 Устанавливаю вебхук: {webhook_url}")
         await bot.set_webhook(webhook_url)
-        logger.info("Бот успешно запущен")
+        logger.info("🤖 Бот запущен")
     except Exception as e:
-        logger.critical(f"Ошибка запуска вебхука: {str(e)}")
+        logger.critical(f"🚨 Ошибка вебхука: {str(e)}")
         exit(1)
 
 def main():
@@ -160,7 +162,7 @@ def main():
     try:
         web.run_app(app, host=WEB_SERVER_HOST, port=WEB_SERVER_PORT)
     except Exception as e:
-        logger.critical(f"Ошибка сервера: {str(e)}")
+        logger.critical(f"🚨 Серверная ошибка: {str(e)}")
         exit(1)
 
 if __name__ == '__main__':
