@@ -1,4 +1,5 @@
-# main.py
+from aiogram import Dispatcher, types
+from aiogram.fsm.storage.memory import MemoryStorage
 import asyncio
 import os
 from aiogram import Bot, Dispatcher, types
@@ -135,5 +136,9 @@ async def main():
     logger.info("Доступные модели: " + ", ".join(MODELS.keys()))
     await dp.start_polling(bot)
 
+async def on_startup(dp: Dispatcher):
+    await bot.delete_webhook(drop_pending_updates=True)
+
 if __name__ == '__main__':
+    dp.startup.register(on_startup)
     asyncio.run(main())
