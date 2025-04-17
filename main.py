@@ -1,5 +1,3 @@
-import signal
-from aiogram import Dispatcher
 from aiogram import Dispatcher, types
 from aiogram.fsm.storage.memory import MemoryStorage
 import asyncio
@@ -44,7 +42,9 @@ MODELS = {
     "qwen": "🎲 Qwen 32B",
     "qwen 2.5": "🎲 Qwen 2.5",
     "llama-4-maverick": "🦙 Llama Maverick",
-    "llama-4-scout": "🦙 Llama Scout"
+    "llama-4-scout": "🦙 Llama Scout",
+    "llama-3.3-70B": "🦙 Llama 3.3 70B",
+    "deepseek-r1-free": "🚀 DeepSeek R1 Free",
 }
 
 def get_model_keyboard(selected: str = None) -> types.InlineKeyboardMarkup:
@@ -160,8 +160,6 @@ async def main():
     site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
 
-    dp.shutdown.register(on_shutdown)
-
     # Запуск бота с обработкой shutdown
     try:
         logger.info("🤖 Бот запущен в режиме поллинга")
@@ -169,17 +167,5 @@ async def main():
     finally:
         await runner.cleanup()  # Корректное завершение
 
-async def on_shutdown(dp: Dispatcher):
-    await dp.storage.close()
-    await dp.storage.wait_closed()
-    await bot.session.close()
-
 if __name__ == '__main__':
-    loop = asyncio.new_event_loop()
-    try:
-        loop.run_until_complete(main())
-    except KeyboardInterrupt:
-        pass
-    finally:
-        loop.run_until_complete(on_shutdown(dp))
-        loop.close()
+    asyncio.run(main())
