@@ -43,8 +43,7 @@ MODELS = {
     "qwen 2.5": "🎲 Qwen 2.5",
     "llama-4-maverick": "🦙 Llama Maverick",
     "llama-4-scout": "🦙 Llama Scout",
-    "llama-3.3-70B": "🦙 Llama 3.3 70B",
-    "deepseek-r1-free": "🚀 DeepSeek R1 Free",
+    "deepseek-r1-free": "🚀 DeepSeek R1 Free"
 }
 
 def get_model_keyboard(selected: str = None) -> types.InlineKeyboardMarkup:
