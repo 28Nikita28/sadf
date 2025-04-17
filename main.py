@@ -147,20 +147,23 @@ async def dummy_handler(request):
     return web.Response(text="OK")
 
 async def main():
-    # Создаем приложение aiohttp
+    # Инициализация веб-сервера для Render
     app = web.Application()
     app.router.add_get("/", dummy_handler)
-    
-    # Настраиваем порт
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", int(os.getenv("PORT", 8000)))
     
-    # Запускаем бота и сервер
-    await asyncio.gather(
-        site.start(),
-        dp.start_polling(bot)
-    )
+    # Порт для Render
+    PORT = int(os.getenv("PORT", 8000))
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    await site.start()
+
+    # Запуск бота с обработкой shutdown
+    try:
+        logger.info("🤖 Бот запущен в режиме поллинга")
+        await dp.start_polling(bot, handle_as_tasks=True)
+    finally:
+        await runner.cleanup()  # Корректное завершение
 
 if __name__ == '__main__':
     asyncio.run(main())
