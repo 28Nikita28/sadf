@@ -1,3 +1,5 @@
+import signal
+from aiogram import Dispatcher
 from aiogram import Dispatcher, types
 from aiogram.fsm.storage.memory import MemoryStorage
 import asyncio
@@ -158,6 +160,8 @@ async def main():
     site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
 
+    dp.shutdown.register(on_shutdown)
+
     # Запуск бота с обработкой shutdown
     try:
         logger.info("🤖 Бот запущен в режиме поллинга")
@@ -165,5 +169,17 @@ async def main():
     finally:
         await runner.cleanup()  # Корректное завершение
 
+async def on_shutdown(dp: Dispatcher):
+    await dp.storage.close()
+    await dp.storage.wait_closed()
+    await bot.session.close()
+
 if __name__ == '__main__':
-    asyncio.run(main())
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        pass
+    finally:
+        loop.run_until_complete(on_shutdown(dp))
+        loop.close()
