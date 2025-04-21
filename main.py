@@ -12,6 +12,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.markdown import hcode, hbold
 from aiogram.client.default import DefaultBotProperties
 from aiohttp import web
+import aiohttp
 
 from generator import generate
 
@@ -20,7 +21,6 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-# Проверка обязательных переменных
 TOKEN = os.getenv("TG_TOKEN")
 if not TOKEN:
     logger.critical("❌ Отсутствует TG_TOKEN")
@@ -67,6 +67,7 @@ def get_model_keyboard(selected: str = None) -> types.InlineKeyboardMarkup:
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
     try:
+        await state.clear()  # Сбрасываем состояние
         await state.set_data({"selected_model": "deepseek"})
         await message.answer(
             f"{hbold('🤖 AI Assistant Bot')}\n\n"
@@ -114,7 +115,6 @@ async def handle_message(message: types.Message, state: FSMContext):
         
         processing_msg = await message.answer("⏳ Обработка запроса...")
         
-        # Для примера используем локальный URL
         response = await generate(message.text, "https://hdghs.onrender.com", model)
         
         await processing_msg.delete()
@@ -133,38 +133,34 @@ async def handle_message(message: types.Message, state: FSMContext):
         logger.error(f"Ошибка: {str(e)[:200]}")
         await message.answer("⚠️ Ошибка обработки запроса")
 
-async def main():
-    logger.info("🤖 Бот запущен в режиме поллинга")
-    logger.info("Доступные модели: " + ", ".join(MODELS.keys()))
-    await dp.start_polling(bot)
-
-async def on_startup(dp: Dispatcher):
-    await bot.delete_webhook(drop_pending_updates=True)
-
-async def start_bot(app):
-    await dp.start_polling(bot)
-
-async def dummy_handler(request):
-    return web.Response(text="OK")
+async def keep_alive():
+    while True:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get("https://hdghs.onrender.com") as resp:
+                    logger.info("Keep-alive request sent")
+        except Exception as e:
+            logger.error(f"Keep-alive error: {str(e)}")
+        await asyncio.sleep(300)  # Каждые 5 минут
 
 async def main():
-    # Инициализация веб-сервера для Render
+    # Инициализация веб-сервера
     app = web.Application()
-    app.router.add_get("/", dummy_handler)
+    app.router.add_get("/", lambda request: web.Response(text="OK"))
     runner = web.AppRunner(app)
     await runner.setup()
     
-    # Порт для Render
     PORT = int(os.getenv("PORT", 8000))
     site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
 
-    # Запуск бота с обработкой shutdown
-    try:
-        logger.info("🤖 Бот запущен в режиме поллинга")
-        await dp.start_polling(bot, handle_as_tasks=True)
-    finally:
-        await runner.cleanup()  # Корректное завершение
+    # Запуск задачи для поддержания активности
+    asyncio.create_task(keep_alive())
+
+    # Перезагрузка бота при переподключении
+    await bot.delete_webhook(drop_pending_updates=True)
+    logger.info("🤖 Бот запущен в режиме поллинга")
+    await dp.start_polling(bot)
 
 if __name__ == '__main__':
     asyncio.run(main())
